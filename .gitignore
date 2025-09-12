@@ -1,0 +1,6 @@
+.DS_store
+.env
+.vscode
+backup
+data/*
+node_modules

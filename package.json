@@ -1,0 +1,29 @@
+{
+  "name": "wopr",
+  "version": "0.0.1",
+  "description": "Experimental chatbot for the CSC.",
+  "main": "wopr.js",
+  "engines": {
+    "node": "24.x",
+    "npm": "*"
+  },
+  "scripts": {
+    "dev": "nodemon wopr.js",
+    "start": "node wopr.js",
+    "update-all": "npx npm-check-updates -u && npm i"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/destru/wopr.git"
+  },
+  "author": "destru@protonmail.com",
+  "license": "ISC",
+  "dependencies": {
+    "discord.js": "^14.22.1",
+    "dotenv": "^17.2.2"
+  },
+  "devDependencies": {
+    "nodemon": "^3.1.10",
+    "prettier": "3.6.2"
+  }
+}
