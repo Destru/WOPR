@@ -31,6 +31,10 @@ const markSeen = (id) => {
 const ZKILL_DEBUG = process.env.ZKILL_DEBUG === '1'
 const CHAR_ID = Number(EVE_CHAR_ID)
 
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
+const ZKILL_POLL_MS = Number(process.env.ZKILL_MIN_POLL_MS || 10000)
+const ZKILL_BACKOFF_MS = Number(process.env.ZKILL_BACKOFF_MS || 30000)
+
 async function zKillLoop() {
   const targetId = ZKILL_DEBUG ? '845227759168782336' : ZKILL_CHANNEL_ID
   let channel = client.channels.cache.get(targetId)
@@ -43,8 +47,14 @@ async function zKillLoop() {
     ? ZKILL_REDISQ_URL
     : `${ZKILL_REDISQ_URL}&queueID=${queueID}`
 
+  let lastPoll = 0
   for (;;) {
     try {
+      const now = Date.now()
+      const wait = Math.max(0, ZKILL_POLL_MS - (now - lastPoll))
+      if (wait > 0) await sleep(wait)
+      lastPoll = Date.now()
+
       const res = await fetch(base, {
         redirect: 'follow',
         headers: {
@@ -53,8 +63,17 @@ async function zKillLoop() {
         },
       })
       if (!res.ok) {
-        console.log(`[zkill] http ${res.status} ${res.statusText}`)
-        await new Promise((r) => setTimeout(r, 2500))
+        if (res.status === 429) {
+          const ra = Number(res.headers.get('retry-after'))
+          const backoff =
+            (isFinite(ra) && ra > 0 ? ra * 1000 : ZKILL_BACKOFF_MS) +
+            Math.floor(Math.random() * 2000)
+          console.log(`[zkill] backing off for ${Math.round(backoff / 1000)}s`)
+          await sleep(backoff)
+        } else {
+          console.log(`[zkill] http ${res.status} ${res.statusText}`)
+          await sleep(ZKILL_POLL_MS)
+        }
         continue
       }
       const data = await res.json().catch((e) => {
@@ -151,7 +170,11 @@ const onReady = () => {
   client.user.setPresence({
     status: 'online',
     activities: [
-      { name: 'Global Thermonuclear War', type: ActivityType.Playing },
+      {
+        applicationId: '363413402300710912',
+        name: 'EVE Online',
+        type: ActivityType.Playing,
+      },
     ],
   })
 
