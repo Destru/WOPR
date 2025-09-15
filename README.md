@@ -1,3 +1,3 @@
 # WOPR
 
-How about global thermonuclear war?
+> A strange game. The only winning move is not to play.
