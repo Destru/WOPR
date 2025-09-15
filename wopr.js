@@ -10,9 +10,8 @@ const client = new Client({
   intents: [GatewayIntentBits.Guilds],
 })
 
-const COLOR = 0x2c2f33
-const EVE_CHAR_ID = '1761654327'
-const ZKILL_CHANNEL_ID = '405503298951446528'
+const ZKILL_CHAR_ID = '1761654327'
+const ZKILL_CHANNEL_ID = '1416911551960711291'
 const ZKILL_DEBUG = process.env.ZKILL_DEBUG === '1'
 const ZKILL_REDISQ_URL = 'https://zkillredisq.stream/listen.php'
 const ZKILL_TTW = 10
@@ -23,7 +22,7 @@ const markSeen = (id) => {
   if (seenKillmails.has(id)) return
   seenKillmails.add(id)
   seenQueue.push(id)
-  if (seenQueue.length > 100) {
+  if (seenQueue.length > 500) {
     const old = seenQueue.shift()
     seenKillmails.delete(old)
   }
@@ -31,19 +30,18 @@ const markSeen = (id) => {
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
 
-const ZKILL_BACKOFF_MS = 10000
-const CHAR_ID = Number(EVE_CHAR_ID)
+const ZKILL_BACKOFF_MS = ZKILL_TTW * 1000
+const CHAR_ID = Number(ZKILL_CHAR_ID)
 
 async function zKillLoop() {
   let channel = client.channels.cache.get(ZKILL_CHANNEL_ID)
   if (!channel)
     channel = await client.channels.fetch(ZKILL_CHANNEL_ID).catch(() => null)
 
-  const queueID = `WOPR-${client.user.id}-${CHAR_ID}`
+  const queueID = `WOPR-${client.user.id}`
+
   const baseUrl = new URL(ZKILL_REDISQ_URL)
-  if (!baseUrl.searchParams.has('queueID')) {
-    baseUrl.searchParams.set('queueID', queueID)
-  }
+  baseUrl.searchParams.set('queueID', queueID)
   baseUrl.searchParams.set('ttw', String(ZKILL_TTW))
   const base = baseUrl.toString()
 
@@ -71,11 +69,9 @@ async function zKillLoop() {
       if (!res.ok) {
         if (res.status === 429) {
           const ra = Number(res.headers.get('retry-after'))
-          const backoff =
-            (isFinite(ra) && ra > 0 ? ra * 1000 : ZKILL_BACKOFF_MS) +
-            Math.floor(Math.random() * 2000)
+          const backoff = isFinite(ra) && ra > 0 ? ra * 1000 : ZKILL_BACKOFF_MS
           console.log(
-            `[zkill] 429 rate limited; backing off for ${Math.round(backoff / 1000)}s`,
+            `[zkill] 429 rate limited; ${Math.round(backoff / 1000)}s`,
           )
           await sleep(backoff)
         } else {
@@ -89,11 +85,9 @@ async function zKillLoop() {
       })
       const pkg = data?.package
       if (!pkg) {
-        if (ZKILL_DEBUG) console.log('[zkill] tick (no package)')
+        if (ZKILL_DEBUG) console.log('[zkill] tick')
         continue
       }
-      if (ZKILL_DEBUG)
-        console.log(`[zkill] package received: ${pkg.killmail?.killmail_id}`)
 
       const km = pkg.killmail
       const zkb = pkg.zkb || {}
@@ -105,28 +99,25 @@ async function zKillLoop() {
       const involved =
         attackers.some((a) => Number(a?.character_id) === CHAR_ID) ||
         Number(km?.victim.character_id) === CHAR_ID
+
       if (!involved) {
         if (ZKILL_DEBUG) console.log(`[zkill] skip: ${id}`)
         markSeen(id)
         continue
       }
 
-      const shipId = km?.victim?.ship_type_id || null
       const link = `https://zkillboard.com/kill/${id}/`
+      const shipId = km?.victim?.ship_type_id || null
+
+      const isLoss = Number(km?.victim?.character_id) === CHAR_ID
+      const isPod = shipId === 670
+
       const totalValue = zkb?.totalValue
         ? `${Math.round(zkb.totalValue).toLocaleString()} ISK`
         : ''
       const droppedValue = zkb?.droppedValue
         ? `${Math.round(zkb.droppedValue).toLocaleString()} ISK`
         : ''
-
-      const isSolo =
-        attackers.length === 1 && Number(attackers[0]?.character_id) === CHAR_ID
-      const title = ZKILL_DEBUG
-        ? 'Debug 🛰️'
-        : isSolo
-          ? 'Solokill 🛰️'
-          : 'Kill 🛰️'
 
       const fields = []
       if (totalValue)
@@ -135,9 +126,9 @@ async function zKillLoop() {
         fields.push({ name: 'Loot', value: droppedValue, inline: true })
 
       const embed = new EmbedBuilder()
-        .setColor(COLOR)
+        .setColor(isLoss ? 0xfffff : 0x2b2d31)
         .setDescription(`[Open on zKillboard](${link})`)
-        .setTitle(title)
+        .setTitle(isLoss ? 'Lossmail ☠️' : 'Killmail ☠️')
 
       if (shipId)
         embed.setThumbnail(
@@ -145,19 +136,17 @@ async function zKillLoop() {
         )
       if (fields.length) embed.addFields(fields)
 
-      await channel.send({ embeds: [embed] })
+      if (!isLoss && !isPod) await channel.send({ embeds: [embed] })
       markSeen(id)
     } catch (e) {
       if (e?.name === 'AbortError') {
-        if (ZKILL_DEBUG) console.log('[zkill] long-poll timeout; retrying')
+        console.log('[zkill] poll timeout; retrying')
       } else {
         console.log('[zkill] loop error', e?.message || e)
       }
-      await sleep(2000)
+      await sleep(1000)
     } finally {
-      const elapsed = Date.now() - tickStart
-      const wait = 60000 - elapsed
-      if (wait > 0) await sleep(wait)
+      await sleep(250)
     }
   }
 }
@@ -169,8 +158,7 @@ const onReady = () => {
     status: 'online',
     activities: [
       {
-        applicationId: '363413402300710912',
-        name: 'EVE Online',
+        name: 'Global Thermonuclear War',
         type: ActivityType.Playing,
       },
     ],
@@ -180,13 +168,4 @@ const onReady = () => {
 }
 
 client.once('clientReady', onReady)
-
 client.login(process.env.WOPR_TOKEN || process.env.DISCORD_TOKEN)
-
-const http = require('http')
-http
-  .createServer(function (req, res) {
-    res.writeHead(301, { Location: 'https://cyberpunksocial.club' })
-    res.end()
-  })
-  .listen(8080)
