@@ -106,7 +106,6 @@ async function zKillLoop() {
         continue
       }
 
-      const link = `https://zkillboard.com/kill/${id}/`
       const shipId = km?.victim?.ship_type_id || null
 
       const isLoss = Number(km?.victim?.character_id) === CHAR_ID
@@ -126,17 +125,17 @@ async function zKillLoop() {
         fields.push({ name: 'Loot', value: droppedValue, inline: true })
 
       const embed = new EmbedBuilder()
-        .setColor(isLoss ? 0xfffff : 0x2b2d31)
-        .setDescription(`[Open on zKillboard](${link})`)
-        .setTitle(isLoss ? 'Lossmail ☠️' : 'Killmail ☠️')
+        .setColor(isLoss ? 0x333337 : 0x00ff00)
+        .setLink(`https://zkillboard.com/kill/${id}/`)
+        .setTitle(isLoss ? 'Lossmail' : 'Killmail')
 
       if (shipId)
         embed.setThumbnail(
-          `https://images.evetech.net/types/${shipId}/render?size=128`,
+          `https://images.evetech.net/types/${shipId}/render?size=64`,
         )
       if (fields.length) embed.addFields(fields)
 
-      if (!isLoss && !isPod) await channel.send({ embeds: [embed] })
+      await channel.send({ embeds: [embed] })
       markSeen(id)
     } catch (e) {
       if (e?.name === 'AbortError') {
