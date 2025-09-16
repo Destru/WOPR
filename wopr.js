@@ -38,7 +38,7 @@ async function zKillLoop() {
   if (!channel)
     channel = await client.channels.fetch(ZKILL_CHANNEL_ID).catch(() => null)
 
-  const queueID = `WOPR-${client.user.id}`
+  const queueID = `WOPR-${CHAR_ID}`
 
   const baseUrl = new URL(ZKILL_REDISQ_URL)
   baseUrl.searchParams.set('queueID', queueID)
@@ -126,7 +126,7 @@ async function zKillLoop() {
 
       const embed = new EmbedBuilder()
         .setColor(isLoss ? 0x333337 : 0x00ff00)
-        .setLink(`https://zkillboard.com/kill/${id}/`)
+        .setURL(`https://zkillboard.com/kill/${id}/`)
         .setTitle(isLoss ? 'Lossmail' : 'Killmail')
 
       if (shipId)
