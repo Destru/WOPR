@@ -1,6 +1,6 @@
 {
   "name": "wopr",
-  "version": "0.0.6",
+  "version": "0.0.7",
   "description": "Experimental chatbot for the CSC.",
   "main": "wopr.js",
   "engines": {
