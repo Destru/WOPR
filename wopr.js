@@ -13,8 +13,11 @@ const client = new Client({
 const ZKILL_CHAR_ID = '1761654327'
 const ZKILL_CHANNEL_ID = '1416911551960711291'
 const ZKILL_DEBUG = process.env.ZKILL_DEBUG === '1'
-const ZKILL_REDISQ_URL = 'https://zkillredisq.stream/listen.php'
 const ZKILL_TTW = 10
+const ZKILL_REDISQ_URL = 'https://zkillredisq.stream/listen.php'
+const ZKILL_PERSIST = process.env.ZKILL_PERSIST || false
+
+const CHAR_ID = Number(ZKILL_CHAR_ID)
 
 const seenKillmails = new Set()
 const seenQueue = []
@@ -30,15 +33,12 @@ const markSeen = (id) => {
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms))
 
-const ZKILL_BACKOFF_MS = ZKILL_TTW * 1000
-const CHAR_ID = Number(ZKILL_CHAR_ID)
-
 async function zKillLoop() {
   let channel = client.channels.cache.get(ZKILL_CHANNEL_ID)
   if (!channel)
     channel = await client.channels.fetch(ZKILL_CHANNEL_ID).catch(() => null)
 
-  const queueID = `WOPR-${CHAR_ID}`
+  const queueID = `WOPR-${ZKILL_PERSIST ? client.user.id : Date.now()}`
 
   const baseUrl = new URL(ZKILL_REDISQ_URL)
   baseUrl.searchParams.set('queueID', queueID)
@@ -69,7 +69,7 @@ async function zKillLoop() {
       if (!res.ok) {
         if (res.status === 429) {
           const ra = Number(res.headers.get('retry-after'))
-          const backoff = isFinite(ra) && ra > 0 ? ra * 1000 : ZKILL_BACKOFF_MS
+          const backoff = isFinite(ra) && ra > 0 ? ra * 1000 : ZKILL_TTW * 1000
           console.log(
             `[zkill] 429 rate limited; ${Math.round(backoff / 1000)}s`,
           )
@@ -99,17 +99,16 @@ async function zKillLoop() {
       const involved =
         attackers.some((a) => Number(a?.character_id) === CHAR_ID) ||
         Number(km?.victim.character_id) === CHAR_ID
+      const ship = km?.victim?.ship_type_id || null
 
-      if (!involved) {
+      const isLoss = Number(km?.victim?.character_id) === CHAR_ID
+      const isPod = ship === 670
+
+      if (!involved || isPod) {
         if (ZKILL_DEBUG) console.log(`[zkill] skip: ${id}`)
         markSeen(id)
         continue
       }
-
-      const shipId = km?.victim?.ship_type_id || null
-
-      const isLoss = Number(km?.victim?.character_id) === CHAR_ID
-      const isPod = shipId === 670
 
       const totalValue = zkb?.totalValue
         ? `${Math.round(zkb.totalValue).toLocaleString()} ISK`
@@ -127,15 +126,15 @@ async function zKillLoop() {
       const embed = new EmbedBuilder()
         .setColor(isLoss ? 0x333337 : 0x00ff00)
         .setURL(`https://zkillboard.com/kill/${id}/`)
-        .setTitle(isLoss ? 'Lossmail' : 'Killmail')
+        .setTitle(isLoss ? 'Lossmail 🛰️' : 'Killmail 🛰️')
 
-      if (shipId)
+      if (ship)
         embed.setThumbnail(
-          `https://images.evetech.net/types/${shipId}/render?size=64`,
+          `https://images.evetech.net/types/${ship}/render?size=64`,
         )
       if (fields.length) embed.addFields(fields)
 
-      await channel.send({ embeds: [embed] })
+      if (!isPod) await channel.send({ embeds: [embed] })
       markSeen(id)
     } catch (e) {
       if (e?.name === 'AbortError') {
